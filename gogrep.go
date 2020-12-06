@@ -5,6 +5,8 @@ import "os"
 import "flag"
 import "strings"
 import "path/filepath"
+import "io/ioutil"
+import "bufio"
 
 type Color string
 
@@ -16,9 +18,9 @@ const (
 	ColorReset        = "\u001b[0m"
 )
 
-func colorizePattern(color Color, src string, pattern string){
+func colorizePattern(color Color, src string, pattern string) {
 	tmp := strings.Split(src, pattern)
-	format := strings.Join(tmp, string(ColorRed) + pattern + string(ColorReset))
+	format := strings.Join(tmp, string(ColorRed)+pattern+string(ColorReset))
 	fmt.Println(format)
 }
 
@@ -29,7 +31,7 @@ func colorize(color Color, message string) {
 func main() {
 	args := os.Args[1:]
 	rflag := flag.Bool("R", false, "Recursive search")
-	//fflag := flag.Bool("F", false, "Deep search (read file content)")
+	fflag := flag.Bool("F", false, "Deep search (read file content)")
 
 	flag.Parse()
 
@@ -37,7 +39,7 @@ func main() {
 
 	if len(args) == 0 {
 		PrintUsage()
-		return 
+		return
 	}
 
 	files := []string{}
@@ -54,9 +56,31 @@ func main() {
 		}
 
 		for _, file := range files {
-			for _, pattern := range args {
-				if strings.Contains(file, pattern) {
-					colorizePattern(ColorRed, file, pattern)
+			if *fflag {
+				DeepSearch(file, args)
+			} else {
+				for _, pattern := range args {
+					if strings.Contains(file, pattern) {
+						colorizePattern(ColorRed, file, pattern)
+					}
+				}
+			}
+
+		}
+	} else if *rflag == false {
+		files, err := ioutil.ReadDir(rootDir)
+		if err != nil {
+			panic(err)
+		}
+
+		for _, file := range files {
+			if *fflag {
+				DeepSearch(file.Name(), args)
+			} else {
+				for _, pattern := range args {
+					if strings.Contains(file.Name(), pattern) {
+						colorizePattern(ColorRed, file.Name(), pattern)
+					}
 				}
 			}
 		}
@@ -84,3 +108,29 @@ func ClearArgs(args []string) []string {
 	return args
 }
 
+func DeepSearch(fn string, args []string) {
+	f, _ := os.Open(fn)
+	scanner := bufio.NewScanner(f)
+	lineCounter := 0
+	fnPrinted := false
+	for scanner.Scan() {
+		lineCounter += 1
+		tmp := strings.Trim(strings.Trim(scanner.Text(), " "), "\t")
+		for _, pattern := range args {
+			if strings.Contains(tmp, pattern) {
+				// check and print filename only once
+				if fnPrinted == false {
+					fmt.Println()
+					dir, _ := os.Getwd()
+					fmt.Println(dir + "/" + fn)
+					fnPrinted = true
+				}
+
+				// Print line count and the matching text-pattern
+				fmt.Print(lineCounter, ":  ")
+				colorizePattern(ColorRed, tmp, pattern)
+			}
+		}
+
+	}
+}
